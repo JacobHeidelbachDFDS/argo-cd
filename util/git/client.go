@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"net/url"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
@@ -39,6 +40,8 @@ type nativeGitClient struct {
 	repoURL string
 	root    string
 	auth    transport.AuthMethod
+	httpUsername string
+	httpPassword string
 }
 
 type factory struct{}
@@ -51,7 +54,10 @@ func (f *factory) NewClient(repoURL, path, username, password, sshPrivateKey str
 	clnt := nativeGitClient{
 		repoURL: repoURL,
 		root:    path,
+		httpUsername: username,
+		httpPassword: password,
 	}
+
 	if sshPrivateKey != "" {
 		signer, err := ssh.ParsePrivateKey([]byte(sshPrivateKey))
 		if err != nil {
@@ -93,9 +99,21 @@ func (m *nativeGitClient) Init() error {
 	if err != nil {
 		return err
 	}
+
+	modifiedRepoURL := m.repoURL
+
+	if m.httpUsername != "" || m.httpPassword != "" {
+		u, err := url.Parse(m.repoURL)
+		if err != nil {
+			return err
+		}
+		u.User = url.UserPassword(m.httpUsername, m.httpPassword)
+		modifiedRepoURL = u.String()
+	}
+
 	_, err = repo.CreateRemote(&config.RemoteConfig{
 		Name: git.DefaultRemoteName,
-		URLs: []string{m.repoURL},
+		URLs: []string{modifiedRepoURL},
 	})
 	return err
 }
